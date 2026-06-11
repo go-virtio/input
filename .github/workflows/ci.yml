@@ -1,0 +1,50 @@
+# go-virtio/input CI — build, vet and test with coverage on every
+# push/PR. We keep the matrix small: this is a pure-Go package with no
+# OS-specific bits, so a single ubuntu runner per supported Go version
+# is enough.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.25.x"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: input
+      - uses: actions/checkout@v4
+        with:
+          repository: go-virtio/common
+          path: common
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+      - name: go vet
+        working-directory: input
+        # -unsafeptr=false: buffer.go intentionally turns the
+        # PageAllocator-published uintptr back into a *byte. This is the
+        # documented pattern (mirrors go-virtio/console / go-virtio/net)
+        # and the IOMMU/identity-map contract is enforced by the
+        # Transport implementation, not the driver.
+        run: go vet -unsafeptr=false ./...
+      - name: go test (race + coverage)
+        working-directory: input
+        run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+      - name: coverage gate
+        working-directory: input
+        run: |
+          pct=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "coverage: ${pct}%"
+          awk -v p="$pct" 'BEGIN { exit (p+0 >= 85.0) ? 0 : 1 }' || {
+            echo "coverage below 85% gate"
+            exit 1
+          }
