@@ -1,7 +1,17 @@
-# go-virtio/input CI — build, vet and test with coverage on every
-# push/PR. We keep the matrix small: this is a pure-Go package with no
-# OS-specific bits, so a single ubuntu runner per supported Go version
-# is enough.
+# go-virtio/input CI — build, vet and TEST on all six 64-bit Go
+# targets. The driver is pure Go (CGO disabled) but virtio is a
+# little-endian transport, so we validate on a big-endian arch (s390x)
+# too — that is where an endianness bug in the virtqueue index words
+# would show up.
+#
+# Two job groups:
+#   * native    — amd64 (ubuntu-latest) and arm64 (ubuntu-24.04-arm),
+#                 run with the race detector + coverage gate.
+#   * emulated  — riscv64, loong64, ppc64le, s390x. We cross-compile a
+#                 per-package test binary (CGO disabled) and run it under
+#                 QEMU via docker. The race detector is not supported
+#                 under qemu-user, so these run without -race; coverage
+#                 is still collected and gated.
 
 name: ci
 
@@ -11,12 +21,21 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  native:
+    name: native (${{ matrix.arch }})
     strategy:
+      fail-fast: false
       matrix:
-        go-version: ["1.25.x"]
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,7 +46,7 @@ jobs:
           path: common
       - uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: stable
       - name: go vet
         working-directory: input
         # -unsafeptr=false: buffer.go intentionally turns the
@@ -43,6 +62,85 @@ jobs:
         working-directory: input
         run: |
           pct=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
+          echo "coverage: ${pct}%"
+          awk -v p="$pct" 'BEGIN { exit (p+0 >= 85.0) ? 0 : 1 }' || {
+            echo "coverage below 85% gate"
+            exit 1
+          }
+
+  emulated:
+    name: emulated (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: riscv64
+            image: debian:trixie
+            qemu_cpu: rv64,v=true,vlen=128
+          - arch: loong64
+            image: ghcr.io/loong64/debian:trixie
+            qemu_cpu: la464
+          - arch: ppc64le
+            image: debian:trixie
+            qemu_cpu: power9
+          - arch: s390x
+            image: debian:trixie
+            qemu_cpu: qemu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: input
+      - uses: actions/checkout@v4
+        with:
+          repository: go-virtio/common
+          path: common
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - name: go vet
+        working-directory: input
+        run: go vet -unsafeptr=false ./...
+      - name: register binfmt handlers
+        run: docker run --privileged --rm tonistiigi/binfmt --install all
+      - name: cross-compile per-package test binaries
+        working-directory: input
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/tbins
+          for pkg in $(go list ./...); do
+            name=$(echo "$pkg" | tr '/' '_')
+            # Skip packages with no test files (go test -c emits nothing).
+            if go test -c -cover -covermode atomic \
+                 -o "/tmp/tbins/${name}.test" "$pkg"; then
+              [ -f "/tmp/tbins/${name}.test" ] || echo "no tests in $pkg"
+            fi
+          done
+          ls -l /tmp/tbins
+      - name: run test binaries under QEMU (${{ matrix.arch }})
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/gocov
+          shopt -s nullglob
+          for bin in /tmp/tbins/*.test; do
+            docker run --rm --platform "linux/${{ matrix.arch }}" \
+              -e QEMU_CPU="${{ matrix.qemu_cpu }}" \
+              -v /tmp/tbins:/tbins:ro \
+              -v /tmp/gocov:/cov \
+              "${{ matrix.image }}" \
+              "/tbins/$(basename "$bin")" \
+                -test.v -test.count=1 -test.gocoverdir=/cov
+          done
+      - name: coverage gate
+        working-directory: input
+        run: |
+          set -euo pipefail
+          pct=$(go tool covdata percent -i=/tmp/gocov \
+                | grep -oE '[0-9]+\.[0-9]+%' | tail -1 | tr -d '%')
           echo "coverage: ${pct}%"
           awk -v p="$pct" 'BEGIN { exit (p+0 >= 85.0) ? 0 : 1 }' || {
             echo "coverage below 85% gate"

@@ -19,6 +19,14 @@ import "unsafe"
 // The returned slice aliases the underlying memory — DO NOT retain it
 // past the receiver re-posting / freeing the descriptor. ReadEvent
 // copies bytes out before re-posting so callers see a stable slice.
+//
+// The //go:nocheckptr pragma below opts this one documented round-trip
+// out of -d=checkptr: it reconstructs a *byte from a bare uintptr that
+// the PageAllocator/Transport guarantees points at a live, contiguous
+// region (the IOMMU/identity-map contract). checkptr cannot see that
+// provenance and would otherwise abort under `go test -race`.
+//
+//go:nocheckptr
 func readBufferBytes(addr uintptr, length int) []byte {
 	if addr == 0 || length <= 0 {
 		return nil
