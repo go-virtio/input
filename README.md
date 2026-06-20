@@ -1,3 +1,5 @@
+<p align="center"><img src="https://raw.githubusercontent.com/go-virtio/brand/main/social/go-virtio-input.png" alt="go-virtio/input" width="720"></p>
+
 # go-virtio/input
 
 Pure-Go virtio-input driver targeting the `go-virtio/common` transport
