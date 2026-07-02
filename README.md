@@ -2,6 +2,10 @@
 
 # go-virtio/input
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/go-virtio/input.svg)](https://pkg.go.dev/github.com/go-virtio/input)
+[![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![CI](https://github.com/go-virtio/input/actions/workflows/ci.yml/badge.svg)](https://github.com/go-virtio/input/actions/workflows/ci.yml)
+
 Pure-Go virtio-input driver targeting the `go-virtio/common` transport
 interfaces. Implements the modern-transport (Virtio 1.0+) init sequence
 and the device-to-guest event read path for the standard PCI-bound
