@@ -88,14 +88,14 @@ jobs:
             image: debian:trixie
             qemu_cpu: qemu
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: input
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: go-virtio/common
           path: common
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: stable
       - name: go vet
