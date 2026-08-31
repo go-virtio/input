@@ -44,7 +44,7 @@ jobs:
         with:
           repository: go-virtio/common
           path: common
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: go vet
@@ -95,7 +95,7 @@ jobs:
         with:
           repository: go-virtio/common
           path: common
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
       - name: go vet
