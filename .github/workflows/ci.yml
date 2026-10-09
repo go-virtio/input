@@ -46,7 +46,7 @@ jobs:
           path: common
       - uses: actions/setup-go@v7
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: go vet
         working-directory: input
         # -unsafeptr=false: buffer.go intentionally turns the
@@ -97,7 +97,7 @@ jobs:
           path: common
       - uses: actions/setup-go@v7
         with:
-          go-version: 1.27.1
+          go-version: 1.27.2
       - name: go vet
         working-directory: input
         run: go vet -unsafeptr=false ./...
